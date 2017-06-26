@@ -74,6 +74,7 @@ NSString *const RACAFNResponseObjectErrorKey = @"responseObject";
 		NSURLRequest *request = [self.requestSerializer requestWithMethod:method URLString:[[NSURL URLWithString:path relativeToURL:self.baseURL] absoluteString] parameters:parameters error:nil];
 		
 		NSURLSessionDataTask *task = [self dataTaskWithRequest:request completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
+			NSLog(@"%@", [self debugNetworkResponseDescription:task responseObject:responseObject error:error]);
 			if (error) {
 				NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
 				if (responseObject) {
@@ -87,11 +88,62 @@ NSString *const RACAFNResponseObjectErrorKey = @"responseObject";
 			}
 		}];
 		[task resume];
+		NSLog(@"%@", [self debugNetworkRequestDescription:task.currentRequest]);
 		
 		return [RACDisposable disposableWithBlock:^{
 			[task cancel];
 		}];
 	}];
+}
+
+#pragma mark - debug
+- (NSString *)curlCommandLineString:(NSURLRequest *)request
+{
+    __block NSMutableString *displayString = [NSMutableString stringWithFormat:@"curl -X %@", request.HTTPMethod];
+    
+    [displayString appendFormat:@" \'%@\'",  request.URL.absoluteString];
+    
+    [request.allHTTPHeaderFields enumerateKeysAndObjectsUsingBlock:^(id key, id val, BOOL *stop) {
+        [displayString appendFormat:@" -H \'%@: %@\'", key, val];
+    }];
+    
+    if ([request.HTTPMethod isEqualToString:@"POST"] ||
+        [request.HTTPMethod isEqualToString:@"PUT"] ||
+        [request.HTTPMethod isEqualToString:@"PATCH"]) {
+        
+        [displayString appendFormat:@" -d \'%@\'",
+         [[NSString alloc] initWithData:request.HTTPBody encoding:NSUTF8StringEncoding]];
+    }
+    
+    return displayString;
+}
+
+- (NSString *)debugNetworkRequestDescription:(NSURLRequest *)request
+{
+    NSMutableString *displayString = [NSMutableString stringWithFormat:@"\n-------- 时间： %@\n请求报文：\n-------\n%@",
+                                      [[NSDate date] descriptionWithLocale:[NSLocale currentLocale]],
+                                      [self curlCommandLineString:request]];
+    
+    return displayString;
+}
+
+- (NSString *)debugNetworkResponseDescription:(NSURLSessionDataTask * _Nonnull)task
+                               responseObject:(id)responseObject
+                                        error:(NSError *)error
+{
+    NSMutableString *displayString = [NSMutableString stringWithFormat:@"\n-------- 时间： %@\n返回报文：(url:%@)\n",
+                                      [[NSDate date] descriptionWithLocale:[NSLocale currentLocale]],
+                                      task.currentRequest.URL.absoluteString];
+    
+    if (responseObject) {
+        [displayString appendFormat:@"--------\n%@\n", responseObject];
+    }
+    
+    if (error) {
+        [displayString appendFormat:@"--------\nerror: %@\n", error];
+    }
+    
+    return displayString;
 }
 
 @end
